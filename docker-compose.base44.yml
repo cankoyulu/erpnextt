@@ -1,0 +1,112 @@
+x-bench-runtime: &bench-runtime
+  build:
+    context: .
+    dockerfile: Dockerfile.base44
+  working_dir: /home/frappe/bench-data/frappe-bench
+  environment:
+    FRAPPE_WEBSERVER_PORT: "8000"
+    CHOKIDAR_USEPOLLING: "true"
+  volumes:
+    - .:/app
+    - bench-data:/home/frappe/bench-data
+    - erpnext-node-modules:/app/node_modules
+    - banking-node-modules:/app/banking/node_modules
+
+services:
+  mariadb:
+    image: mariadb:11.4
+    command: ["--character-set-server=utf8mb4", "--collation-server=utf8mb4_unicode_ci"]
+    environment:
+      MYSQL_ROOT_PASSWORD: root
+      MYSQL_DATABASE: test_frappe
+      MYSQL_USER: test_frappe
+      MYSQL_PASSWORD: test_frappe
+    volumes:
+      - mariadb-data:/var/lib/mysql
+    healthcheck:
+      test: ["CMD", "healthcheck.sh", "--connect", "--innodb_initialized"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+    restart: on-failure
+
+  redis:
+    image: redis:7
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+    restart: on-failure
+
+  # Sync mounted dependencies, preserve existing sites, and build initial assets.
+  init:
+    <<: *bench-runtime
+    env_file:
+      - /run/base44/app.env
+    working_dir: /home/frappe
+    depends_on:
+      mariadb:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    command:
+      - bash
+      - -ec
+      - |
+        chmod -R a+rX /app
+        mkdir -p /app/node_modules /app/banking/node_modules /app/erpnext/public/dist /app/erpnext/public/banking
+        chown -R frappe:frappe /home/frappe/bench-data /app/node_modules /app/banking/node_modules /app/erpnext/public/dist /app/erpnext/public/banking
+        chown frappe:frappe /app/erpnext/public /app/erpnext/www
+        ln -sfn /home/frappe/bench-data/frappe-bench/sites /app/sites
+        exec su frappe -s /bin/bash -c 'bash /app/.base44/init-bench.sh'
+
+  web:
+    <<: *bench-runtime
+    depends_on:
+      mariadb:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      init:
+        condition: service_completed_successfully
+    command: ["bash", "-ec", "exec su frappe -s /bin/bash -c 'cd /home/frappe/bench-data/frappe-bench && export PATH=\"$$PWD/env/bin:$$PATH\" && exec bench start'"]
+    healthcheck:
+      test:
+        - CMD-SHELL
+        - >-
+          curl --max-time 3 -fsS http://127.0.0.1:8000/api/method/ping >/dev/null
+          || { echo 'Frappe web failed'; exit 1; };
+          curl --max-time 3 -fsS http://127.0.0.1:8000/login >/dev/null
+          || { echo 'Frappe frontend failed'; exit 1; };
+          curl --max-time 3 -fsS 'http://127.0.0.1:9000/socket.io/?EIO=4&transport=polling' | grep -q '"sid"'
+          || { echo 'Realtime server failed'; exit 1; }
+      interval: 15s
+      timeout: 10s
+      retries: 5
+      start_period: 120s
+    restart: on-failure
+
+  # A single origin keeps session cookies, CSRF, and realtime requests together.
+  preview:
+    image: nginx:alpine
+    ports:
+      - "3000:80"
+    volumes:
+      - ./.base44/preview.conf:/etc/nginx/conf.d/default.conf:ro
+    depends_on:
+      web:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "wget -q -T 3 -O /dev/null http://127.0.0.1/api/method/ping && wget -q -T 3 -O /dev/null http://127.0.0.1/login"]
+      interval: 15s
+      timeout: 8s
+      retries: 5
+      start_period: 30s
+    restart: on-failure
+
+volumes:
+  mariadb-data:
+  bench-data:
+  erpnext-node-modules:
+  banking-node-modules:

@@ -1,0 +1,28 @@
+FROM python:3.14-slim
+
+# System dependencies for Frappe/ERPNext development
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    git curl wget gnupg build-essential pkg-config \
+    libmariadb-dev mariadb-client redis-server \
+    libffi-dev libssl-dev libxml2-dev libxslt1-dev \
+    libjpeg-dev libtiff-dev libpng-dev zlib1g-dev \
+    fonts-liberation ca-certificates cron \
+    && rm -rf /var/lib/apt/lists/*
+
+# Node.js 24 from NodeSource (frappe framework requires >=24)
+RUN curl -fsSL https://deb.nodesource.com/setup_24.x | bash - \
+    && apt-get install -y --no-install-recommends nodejs \
+    && rm -rf /var/lib/apt/lists/*
+
+# Yarn via corepack
+RUN corepack enable && corepack prepare yarn@1.22.22 --activate
+
+# Keep the development CLI version reproducible.
+RUN pip install --no-cache-dir frappe-bench==5.31.0
+
+# bench v5 refuses to run as root — create a non-root user
+RUN useradd -m -s /bin/bash frappe
+
+# Application code and setup scripts are read from the mounted checkout.
+
+WORKDIR /home/frappe

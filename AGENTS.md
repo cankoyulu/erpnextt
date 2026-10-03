@@ -1,0 +1,20 @@
+# Base44 development notes
+
+- ERPNext is an app, not a standalone server. The persistent bench is at `/home/frappe/bench-data/frappe-bench`; it contains the separate Frappe and Payments checkouts. `apps/erpnext` links to the bind-mounted `/app` checkout. Do not replace these volumes or reinstall an existing site to repair startup.
+- This checkout and Frappe develop require Python 3.14 and Node 24. `Dockerfile.base44` installs runtime/system dependencies only; application code and `.base44/init-bench.sh` come from the checkout. Bench 5.31.0 must run as the non-root `frappe` user.
+- The `init` service runs after MariaDB/Redis healthchecks, refreshes editable Python dependencies and frozen Yarn installs, creates only missing sites/apps, then builds assets. Web waits for successful completion. Installation/build failures must fail init, not be hidden behind a pipe or `|| true`.
+- Frappe needs write access to generated assets beneath `erpnext/public`, and the Banking build copies its entry into `erpnext/www`. Compose grants these permissions and mounts separate node_modules volumes. The `/app/sites` link is generated and ignored; never commit site configurations or dump their contents into logs.
+- Use `bench serve --host 0.0.0.0 --proxy`, not a bare `gunicorn` Procfile command. The bench virtualenv is on PATH. Python reload, asset watch, scheduler, worker, and realtime run under `bench start`; supervisor failure stops the container rather than leaving only part of the app alive.
+- Port 3000 is the nginx `preview` service. It forwards web/API/assets to port 8000 and `/socket.io/` to port 9000 on `web`, preserving a single browser origin for session cookies. It accepts changing preview hosts; do not hardcode Base44 hostnames.
+- `DEV_SERVER=0` on the web process prevents Frappe's browser client from appending an internal realtime port to the public HTTPS origin. This does not disable the Python reloader, developer mode, or `bench watch`.
+- Banking's bench-relative configuration path does not work when ERPNext is linked to `/app`. `FRAPPE_WEBSERVER_PORT=8000` allows its Vite configuration to load in this layout. For Banking source changes, run `bench build --app erpnext` as `frappe` from the bench, then refresh the preview; Desk assets are rebuilt by `bench watch`.
+- `FRAPPE_ADMIN_PASSWORD` is supplied through `/run/base44/app.env` to init and used only when creating a new site. Existing passwords are never reset. The original sandbox demo site has the documented `Administrator` / `admin` login; it is development-only, not a production credential.
+
+## Verification
+
+- Start with `docker compose -f docker-compose.base44.yml up -d --build`. `init` should exit 0; `mariadb`, `redis`, `web`, and `preview` must all report healthy in `docker compose -f docker-compose.base44.yml ps -a`.
+- `curl -fsS http://localhost:3000/api/method/ping` must return `{"message":"pong"}`. `/login` must return HTML and all linked CSS/JS must return 200. Web healthchecks also require a responding realtime polling handshake, not only an open port.
+- Logs must show the development server's reloader and `Watching for changes...`. Check with `docker compose -f docker-compose.base44.yml logs --tail=100 web`.
+- Normal authenticated requests were verified for `/desk`, `/banking`, all referenced assets, and the `/test_site` Socket.IO namespace. `/app` redirects to `/desk`; follow that redirect when checking it.
+- Browser preview helpers assume client-side routing. Frappe uses server-rendered routes: a helper route change may not load new HTML; use the dedicated preview reload when needed. Do not treat a browser-tool failure as a service failure when curl and healthchecks pass.
+- The repo's JavaScript tests can run with `docker compose -f docker-compose.base44.yml exec -T web sh -c 'cd /app && node --test "erpnext/tests/js/**/*.test.mjs"'`. Shell setup validation: `bash -n .base44/init-bench.sh`; Compose validation: `docker compose -f docker-compose.base44.yml config --quiet`.

@@ -1,0 +1,13 @@
+{
+  "previewPort": 3000,
+  "healthPath": "/",
+  "startCommand": "docker compose -f docker-compose.base44.yml up -d --build",
+  "secrets": [
+    {
+      "name": "FRAPPE_ADMIN_PASSWORD",
+      "description": "Administrator password used only when creating a new development site; existing site passwords are preserved. Set or review it in the Base44 Secrets dashboard.",
+      "requiredAtBoot": true,
+      "generatedForDevelopment": true
+    }
+  ]
+}
