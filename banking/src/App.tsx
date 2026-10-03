@@ -13,9 +13,8 @@ import { ThemeProvider } from './components/ui/theme-provider'
 const BankStatementImporter = lazy(() => import('@/pages/BankStatementImporter'))
 const ViewBankStatementImportLog = lazy(() => import('@/pages/ViewBankStatementImportLog'))
 
-const isLoggedIn = window.frappe?.boot?.user?.name && window.frappe?.boot?.user?.name !== 'Guest' || !!sessionStorage.getItem('tc_login')
-
 function App() {
+	const isLoggedIn = (window.frappe?.boot?.user?.name && window.frappe?.boot?.user?.name !== 'Guest') || !!sessionStorage.getItem('tc_login')
 	return (
 		<LucideProvider
 			strokeWidth={1.5}

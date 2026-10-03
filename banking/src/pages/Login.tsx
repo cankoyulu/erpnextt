@@ -48,7 +48,7 @@ export default function Login() {
 
 		toast.success("Giriş başarılı! Panele yönlendiriliyorsunuz...")
 		sessionStorage.setItem("tc_login", tcNo)
-		navigate("/")
+		window.location.href = "/banking"
 	}
 
 	return (
