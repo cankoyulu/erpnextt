@@ -5,6 +5,7 @@ import { Toaster } from '@/components/ui/sonner'
 import BankReconciliation from '@/pages/BankReconciliation'
 import BankStatementImporterContainer from '@/pages/BankStatementImporterContainer'
 import PreRegistration from '@/pages/PreRegistration'
+import Login from '@/pages/Login'
 import { TooltipProvider } from './components/ui/tooltip'
 import { LucideProvider } from 'lucide-react'
 import { ThemeProvider } from './components/ui/theme-provider'
@@ -12,7 +13,7 @@ import { ThemeProvider } from './components/ui/theme-provider'
 const BankStatementImporter = lazy(() => import('@/pages/BankStatementImporter'))
 const ViewBankStatementImportLog = lazy(() => import('@/pages/ViewBankStatementImportLog'))
 
-const isLoggedIn = window.frappe?.boot?.user?.name && window.frappe?.boot?.user?.name !== 'Guest'
+const isLoggedIn = window.frappe?.boot?.user?.name && window.frappe?.boot?.user?.name !== 'Guest' || !!sessionStorage.getItem('tc_login')
 
 function App() {
 	return (
@@ -31,8 +32,9 @@ function App() {
 					>
 						<BrowserRouter basename={import.meta.env.VITE_BASE_NAME ? `/${import.meta.env.VITE_BASE_NAME}` : ''}>
 							<Routes>
-								{/* Public route — accessible without login */}
+								{/* Public routes — accessible without login */}
 								<Route path="/on-kayit" element={<PreRegistration />} />
+								<Route path="/giris" element={<Login />} />
 
 								{/* Authenticated routes */}
 								{isLoggedIn ? (
@@ -46,8 +48,8 @@ function App() {
 									</>
 								) : (
 									<>
-										<Route index element={<PreRegistration />} />
-										<Route path="*" element={<PreRegistration />} />
+										<Route index element={<Login />} />
+										<Route path="*" element={<Login />} />
 									</>
 								)}
 							</Routes>
